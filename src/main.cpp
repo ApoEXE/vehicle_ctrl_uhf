@@ -82,8 +82,24 @@ volatile uint32_t lastMicros = 0;
 uint32_t time1 = 0;
 bool run_once = 0;
 
-void func_w2();
-void func_w1(uint8 command);
+// GEMINI
+unsigned long lastMicro = 0;
+bool forward = true;
+bool w1 = 0; // Initialize w1
+enum State
+{
+  IDLE,
+  W2_STEP1,
+  W2_STEP2,
+  W2_STEP3,
+  W2_STEP4,
+  W1_STEP
+};
+State currentState = IDLE;
+size_t w2_counter = 0;
+size_t w1_counter = 0;
+uint8_t w1_code = 0;
+
 void setup()
 {
   // initialize LED digital pin as an output.
@@ -160,16 +176,99 @@ void loop()
       time1++;
     }
   }
-  volatile long long lastMicro = 0;
-
+  // GEMINI
+  UHF_recv();
   if (micros() - lastMicro >= 50)
   {
-
     lastMicro = micros();
+
+    switch (currentState)
+    {
+    case IDLE:
+      if (forward)
+      {
+        currentState = W2_STEP1;
+        w2_counter = 0;
+      }
+      break;
+
+    case W2_STEP1:
+      digitalWrite(D6, 0);
+      if (micros() - lastMicro >= 440)
+      {
+        lastMicro = micros();
+        currentState = W2_STEP2;
+      }
+      break;
+
+    case W2_STEP2:
+      digitalWrite(D6, 0);
+      if (micros() - lastMicro >= 500)
+      {
+        lastMicro = micros();
+        currentState = W2_STEP3;
+      }
+      break;
+
+    case W2_STEP3:
+      digitalWrite(D6, 0);
+      if (micros() - lastMicro >= 500)
+      {
+        lastMicro = micros();
+        currentState = W2_STEP4;
+      }
+      break;
+
+    case W2_STEP4:
+      digitalWrite(D6, 1);
+      if (micros() - lastMicro >= 680)
+      {
+        lastMicro = micros();
+        w2_counter++;
+        if (w2_counter < 4)
+        {
+          currentState = W2_STEP1;
+        }
+        else
+        {
+          currentState = W1_STEP;
+          w1_code = cmd * 2; // Calculate w1 code
+          w1_counter = 0;
+          w1 = 0;
+        }
+      }
+      break;
+
+    case W1_STEP:
+      digitalWrite(D6, w1);
+      unsigned long w1_delay = 0;
+
+      if (w1_counter < (w1_code - 1) && w1 == 1)
+      {
+        w1_delay = 660;
+      }
+      else if (w1_counter == (w1_code - 1) && w1 == 1)
+      {
+        w1_delay = 460;
+      }
+      else if (w1 == 0)
+      {
+        w1_delay = 320;
+      }
+
+      if (micros() - lastMicro >= w1_delay)
+      {
+        lastMicro = micros();
+        w1 = !w1;
+        w1_counter++;
+        if (w1_counter >= w1_code)
+        {
+          currentState = IDLE;
+        }
+      }
+      break;
+    }
   }
-  UHF_recv();
-  func_w2();
-  func_w1(cmd);
 }
 // APP
 void UHF_recv()
@@ -183,41 +282,6 @@ void UHF_recv()
   }
 }
 
-bool func_w2()
-{
-  bool finish = false;
-  for (size_t i = 0; i < 4; i++)
-  {
-    digitalWrite(D6, 0);
-    delayMicroseconds(440);
-    digitalWrite(D6, 0);
-    delayMicroseconds(500);
-    digitalWrite(D6, 0);
-    delayMicroseconds(500);
-    digitalWrite(D6, 1);
-    delayMicroseconds(680);
-  }
-  finish = true;
-  return finish;
-}
-bool func_w1(uint8 command)
-{
-  bool finish = false;
-  uint8_t code = ((command * 2));
-  for (size_t i = 0; i < code; i++)
-  {
-    digitalWrite(D6, w1);
-    if (i < (code - 1) && w1 == 1)
-      delayMicroseconds(660);
-    if (i == (code - 1) && w1 == 1)
-      delayMicroseconds(460);
-    if (w1 == 0)
-      delayMicroseconds(320);
-    w1 = !w1;
-  }
-  finish = true;
-  return finish;
-}
 // OTA
 void onOTAStart()
 {
