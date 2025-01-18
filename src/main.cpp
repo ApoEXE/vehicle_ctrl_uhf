@@ -71,19 +71,18 @@ RH_ASK driver(9600, D1, D2, D5);
 bool recv_flag = false;
 void UHF_recv();
 
-uint16_t w2 = 0b0111011101110111; // start=w2 original 0b1110111011101110;
-bool w1 = 0;                      // toggle 1
-uint16_t tmp_w2 = ~w2;
-uint8_t w1_cnt = 0;
-bool start_flag = 0; // when one send n*w1 with starting 2*w2
-uint8_t w2_cnt = 0;
-volatile uint32_t lastMicros = 0;
 // LOOP counter
 uint32_t time1 = 0;
-bool run_once = 0;
+bool run_once_w21 = 1; // not used
+bool run_once_w22 = 1; // not used
+bool run_once_w23 = 1; // not used
+bool run_once_w24 = 1; // not used
+bool run_once_w11 = 1; // not used
+bool run_once_w12 = 1; // not used
 
 // GEMINI
-unsigned long lastMicro = 0;
+unsigned long lastMicro = 0; // main timer
+unsigned long lastMicro_send = 0;
 bool forward = true;
 bool w1 = 0; // Initialize w1
 enum State
@@ -98,7 +97,7 @@ enum State
 State currentState = IDLE;
 size_t w2_counter = 0;
 size_t w1_counter = 0;
-uint8_t w1_code = 0;
+uint8_t w1_code = 0; // cmd goes in here
 
 void setup()
 {
@@ -176,10 +175,15 @@ void loop()
       time1++;
     }
   }
-  // GEMINI
+
   UHF_recv();
-  if (micros() - lastMicro >= 50)
+  //  GEMINI
+  if (true)
+  // if (micros() - lastMicro >= 50)
   {
+    // digitalWrite(D6, state);
+    digitalWrite(LED_BUILTIN, state);
+    state = !state;
     lastMicro = micros();
 
     switch (currentState)
@@ -193,37 +197,61 @@ void loop()
       break;
 
     case W2_STEP1:
-      digitalWrite(D6, 0);
-      if (micros() - lastMicro >= 440)
+      if (run_once_w21)
       {
-        lastMicro = micros();
+        Serial.println("STEP1");
+        run_once_w21 = 0;
+      }
+
+      digitalWrite(D6, 0);
+      if (micros() - lastMicro_send >= 440)
+      {
+        lastMicro_send = micros();
         currentState = W2_STEP2;
       }
       break;
 
     case W2_STEP2:
-      digitalWrite(D6, 0);
-      if (micros() - lastMicro >= 500)
+      if (run_once_w22)
       {
-        lastMicro = micros();
+        Serial.println("STEP2");
+        run_once_w22 = 0;
+      }
+
+      digitalWrite(D6, 0);
+      if (micros() - lastMicro_send >= 500)
+      {
+        lastMicro_send = micros();
         currentState = W2_STEP3;
       }
       break;
 
     case W2_STEP3:
-      digitalWrite(D6, 0);
-      if (micros() - lastMicro >= 500)
+      if (run_once_w23)
       {
-        lastMicro = micros();
+        Serial.println("STEP3");
+        run_once_w23 = 0;
+      }
+
+      digitalWrite(D6, 0);
+      if (micros() - lastMicro_send >= 500)
+      {
+        lastMicro_send = micros();
         currentState = W2_STEP4;
       }
       break;
 
     case W2_STEP4:
-      digitalWrite(D6, 1);
-      if (micros() - lastMicro >= 680)
+      if (run_once_w24)
       {
-        lastMicro = micros();
+        Serial.println("STEP4");
+        run_once_w24 = 0;
+      }
+
+      digitalWrite(D6, 1);
+      if (micros() - lastMicro_send >= 680)
+      {
+        lastMicro_send = micros();
         w2_counter++;
         if (w2_counter < 4)
         {
@@ -240,6 +268,12 @@ void loop()
       break;
 
     case W1_STEP:
+      if (run_once_w11)
+      {
+        Serial.println("ENTERED W1");
+        run_once_w11 = 0;
+      }
+
       digitalWrite(D6, w1);
       unsigned long w1_delay = 0;
 
@@ -256,9 +290,9 @@ void loop()
         w1_delay = 320;
       }
 
-      if (micros() - lastMicro >= w1_delay)
+      if (micros() - lastMicro_send >= w1_delay)
       {
-        lastMicro = micros();
+        lastMicro_send = micros();
         w1 = !w1;
         w1_counter++;
         if (w1_counter >= w1_code)
